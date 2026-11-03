@@ -1,7 +1,9 @@
 import { SECTIONS, groupsForIds, type Section } from '../data';
 import type { ItemGroup } from '../data/types';
 import type { Difficulty } from '../game/game';
-import { CAMPAIGN_WAVES, LEVELS, isUnlocked, levelStars, type CampaignLevel } from '../progress/campaign';
+import {
+  CAMPAIGN_WAVES, LEVELS, TRACKS, isUnlocked, levelItems, levelStars, nextInTrack, type CampaignLevel, type Track,
+} from '../progress/campaign';
 import { masteryOf } from '../progress/stats';
 import { WAVES_PER_GAME, saveSettings, type GameMode, type MenuTab, type Settings, type Volumes } from '../settings';
 import { bindProgressTab, progressTab } from './progress';
@@ -84,40 +86,60 @@ function stars(n: number): string {
   return '★'.repeat(n) + '☆'.repeat(3 - n);
 }
 
-/** Primer nivel desbloqueado que todavía no se ganó (o el último, si ya están todos). */
-function currentLevelIndex(): number {
-  const i = LEVELS.findIndex((l, idx) => isUnlocked(idx) && levelStars(l.id) === 0);
-  return i === -1 ? LEVELS.length - 1 : i;
+/** Nivel que se juega con el botón principal: el próximo de cada camino, en orden. */
+function suggestedLevel(): CampaignLevel {
+  for (const track of TRACKS) {
+    const next = nextInTrack(track.id);
+    if (next) return next;
+  }
+  return LEVELS[LEVELS.length - 1];
 }
 
-function masteredPercent(groupIds: string[]): number {
-  const items = groupsForIds(groupIds).flatMap((g) => g.items);
+function masteredPercent(level: CampaignLevel): number {
+  const items = levelItems(level);
   if (items.length === 0) return 0;
   return Math.round((items.filter((i) => masteryOf(i.id) === 'mastered').length / items.length) * 100);
 }
 
+function trackRequirement(track: Track): string {
+  const names = track.requires.map((id) => {
+    const level = LEVELS.find((l) => l.id === id)!;
+    const trackName = TRACKS.find((t) => t.id === level.track)!.name;
+    return `<b>${level.title}</b> (${trackName})`;
+  });
+  return `Se desbloquea al ganar ${names.join(' y ')}.`;
+}
+
 function campaignTab(): string {
-  const current = currentLevelIndex();
-  const chapters = [...new Set(LEVELS.map((l) => l.chapter))];
-  return chapters.map((chapter) => `
-    <h3 class="chapter">${chapter}</h3>
-    <div class="levels">
-      ${LEVELS.map((level, index) => ({ level, index })).filter(({ level }) => level.chapter === chapter)
-        .map(({ level, index }) => {
-          const unlocked = isUnlocked(index);
-          const won = levelStars(level.id);
-          const mastered = masteredPercent(level.groups);
-          return `
-            <button type="button" class="level ${unlocked ? '' : 'locked'} ${index === current ? 'current' : ''}"
-              data-level="${level.id}" ${unlocked ? '' : 'disabled'}>
-              <span class="level-num">${index + 1}</span>
-              <span class="level-jp">${level.jp}</span>
-              <span class="level-title">${level.title}</span>
-              <span class="level-stars">${unlocked ? stars(won) : 'Bloqueado'}</span>
-              <span class="level-bar" title="${mastered}% dominado"><span style="width:${mastered}%"></span></span>
-            </button>`;
-        }).join('')}
-    </div>`).join('');
+  return TRACKS.map((track) => {
+    const levels = LEVELS.filter((l) => l.track === track.id);
+    const next = nextInTrack(track.id);
+    const won = levels.filter((l) => levelStars(l.id) > 0).length;
+    const locked = !isUnlocked(levels[0]);
+    return `
+      <section class="track ${locked ? 'locked' : ''}">
+        <h3 class="chapter">
+          <span class="track-jp">${track.jp}</span> ${track.name}
+          <span class="track-count">${won}/${levels.length}</span>
+        </h3>
+        <p class="track-desc">${locked ? trackRequirement(track) : track.description}</p>
+        <div class="levels">
+          ${levels.map((level, index) => {
+            const unlocked = isUnlocked(level);
+            const mastered = masteredPercent(level);
+            return `
+              <button type="button" class="level ${unlocked ? '' : 'locked'} ${level === next ? 'current' : ''}"
+                data-level="${level.id}" ${unlocked ? '' : 'disabled'}>
+                <span class="level-num">${index + 1}</span>
+                <span class="level-jp">${level.jp}</span>
+                <span class="level-title">${level.title}</span>
+                <span class="level-stars">${unlocked ? stars(levelStars(level.id)) : 'Bloqueado'}</span>
+                <span class="level-bar" title="${mastered}% dominado"><span style="width:${mastered}%"></span></span>
+              </button>`;
+          }).join('')}
+        </div>
+      </section>`;
+  }).join('');
 }
 
 // ---------------------------------------------------------------- menú
@@ -145,8 +167,9 @@ export function showMenu(
       </nav>
 
       <div data-panel="campana">
-        <p class="tab-intro">Un camino ordenado para aprender lo del N5. Cada nivel tiene ${CAMPAIGN_WAVES} oleadas y un jefe;
-          ganalo para desbloquear el siguiente. La barra muestra cuánto de su contenido ya dominás.</p>
+        <p class="tab-intro">Hiragana y katakana se pueden aprender en paralelo; kanji se abre cuando conocés los dos.
+          Cada nivel tiene ${CAMPAIGN_WAVES} oleadas y un jefe: ganalo para desbloquear el siguiente del camino.
+          La barra muestra cuánto de su contenido ya dominás.</p>
         ${campaignTab()}
       </div>
 
@@ -209,7 +232,7 @@ export function showMenu(
       start.disabled = n === 0;
       start.textContent = 'Comenzar';
     } else if (tab === 'campana') {
-      const level = LEVELS[currentLevelIndex()];
+      const level = suggestedLevel();
       count.textContent = '';
       start.disabled = false;
       start.textContent = `Jugar: ${level.title}`;
@@ -260,7 +283,7 @@ export function showMenu(
     e.preventDefault();
     if (start.disabled) return;
     if (tab === 'practica') onStart(read(), { kind: 'practice' });
-    else if (tab === 'campana') onStart(read(), { kind: 'level', level: LEVELS[currentLevelIndex()] });
+    else if (tab === 'campana') onStart(read(), { kind: 'level', level: suggestedLevel() });
   });
   bindProgressTab(form, () => onStart(read(), { kind: 'review' }), () => {
     // Al borrar el progreso se redibuja el menú entero (campaña y progreso cambian).

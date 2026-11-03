@@ -6,7 +6,9 @@ import { H, Stage, W } from './game/stage';
 import { playMusic, unlockAudio } from './audio/music';
 import { ALL_ITEMS, groupsForIds } from './data';
 import type { StudyItem } from './data/types';
-import { CAMPAIGN_WAVES, LEVELS, levelStars, saveLevelResult, starsFor } from './progress/campaign';
+import {
+  CAMPAIGN_WAVES, TRACKS, levelPools, levelStars, nextInTrack, saveLevelResult, starsFor,
+} from './progress/campaign';
 import { recordEncounters, reviewWeight, statsOf, weakestItems } from './progress/stats';
 import { WAVES_PER_GAME, loadSettings, saveSettings } from './settings';
 import { showMenu, type MenuAction } from './ui/menu';
@@ -63,7 +65,7 @@ function gameContent(action: MenuAction): { pools: StudyItem[][]; totalWaves: nu
         totalWaves: settings.mode === 'partida' ? WAVES_PER_GAME : null,
       };
     case 'level':
-      return { pools: groupsForIds(action.level.groups).map((g) => g.items), totalWaves: CAMPAIGN_WAVES };
+      return { pools: levelPools(action.level), totalWaves: CAMPAIGN_WAVES };
     case 'review': {
       // Si al reintentar ya no queda nada débil, se repasa todo lo que ya apareció alguna vez.
       const weak = weakestItems(ALL_ITEMS);
@@ -112,8 +114,9 @@ function play(action: MenuAction) {
       const record = stars > levelStars(action.level.id);
       saveLevelResult(action.level.id, stars);
       extras.campaign = { level: action.level, stars, record };
-      const next = LEVELS[LEVELS.indexOf(action.level) + 1];
-      if (next && levelStars(action.level.id) > 0) onNext = () => play({ kind: 'level', level: next });
+      // Siguiente: el próximo del mismo camino; si se completó, el próximo de otro camino.
+      const next = nextInTrack(action.level.track) ?? TRACKS.map((t) => nextInTrack(t.id)).find(Boolean);
+      if (next && result.victory) onNext = () => play({ kind: 'level', level: next });
     }
     unmount = showResults(overlay, result, extras, { onRetry: () => play(action), onMenu: toMenu, onNext });
   });

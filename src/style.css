@@ -707,3 +707,40 @@ kbd {
 .big-stars .off {
   color: var(--paper-dark);
 }
+
+/* Caminos de la campaña */
+.track {
+  margin-bottom: 8px;
+}
+
+.track .chapter {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.track-jp {
+  font-family: var(--kana);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--vermilion);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.track-count {
+  margin-left: auto;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.track-desc {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.track.locked .track-jp {
+  color: var(--muted);
+}
