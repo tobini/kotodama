@@ -4,6 +4,7 @@ import type { Difficulty } from '../game/game';
 import {
   CAMPAIGN_WAVES, LEVELS, TRACKS, isUnlocked, levelItems, levelStars, nextInTrack, type CampaignLevel, type Track,
 } from '../progress/campaign';
+import type { HelpMode } from '../progress/help';
 import { masteryOf } from '../progress/stats';
 import { WAVES_PER_GAME, saveSettings, type GameMode, type MenuTab, type Settings, type Volumes } from '../settings';
 import { bindProgressTab, progressTab } from './progress';
@@ -24,6 +25,12 @@ const DIFFICULTIES: { id: Difficulty; name: string }[] = [
   { id: 'facil', name: 'Fácil' },
   { id: 'normal', name: 'Normal' },
   { id: 'dificil', name: 'Difícil' },
+];
+
+const HELP_MODES: { id: HelpMode; name: string }[] = [
+  { id: 'auto', name: 'Automático' },
+  { id: 'siempre', name: 'Siempre' },
+  { id: 'nunca', name: 'Nunca' },
 ];
 
 const MODES: { id: GameMode; name: string }[] = [
@@ -178,6 +185,13 @@ export function showMenu(
         ${SECTIONS.map((s) => section(s, selected)).join('')}
         <h2>Partida</h2>
         <div class="options">${choice('mode', 'Partida', MODES, settings.mode)}</div>
+        <h2>Ayuda</h2>
+        <p class="tab-intro">En automático, el romaji y el furigana se van retirando a medida que aprendés cada
+          kana y cada kanji. En la campaña la ayuda siempre es automática.</p>
+        <div class="options">
+          ${choice('romaji', 'Romaji', HELP_MODES, settings.romajiHelp)}
+          ${choice('furigana', 'Furigana', HELP_MODES, settings.furiganaHelp)}
+        </div>
       </div>
 
       <div data-panel="progreso">${progressTab()}</div>
@@ -186,8 +200,6 @@ export function showMenu(
         <h2>Opciones</h2>
         <div class="options">
           ${choice('difficulty', 'Dificultad', DIFFICULTIES, settings.difficulty)}
-          ${toggle('hints', 'Ayuda', 'Mostrar romaji', settings.showHints)}
-          ${toggle('furigana', 'Ayuda', 'Furigana en kanji', settings.showFurigana)}
           ${toggle('smart', 'Repaso', 'Más de lo que fallás', settings.smartReview)}
         </div>
         <h2>Volumen</h2>
@@ -213,8 +225,8 @@ export function showMenu(
     groups: [...form.querySelectorAll<HTMLInputElement>('input[name=group]:checked')].map((i) => i.value),
     difficulty: radio('difficulty') as Difficulty,
     mode: radio('mode') as GameMode,
-    showHints: checked('hints'),
-    showFurigana: checked('furigana'),
+    romajiHelp: radio('romaji') as HelpMode,
+    furiganaHelp: radio('furigana') as HelpMode,
     smartReview: checked('smart'),
     tab,
     volumes,

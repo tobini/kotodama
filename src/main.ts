@@ -7,10 +7,11 @@ import { playMusic, unlockAudio } from './audio/music';
 import { ALL_ITEMS, groupsForIds } from './data';
 import type { StudyItem } from './data/types';
 import {
-  CAMPAIGN_WAVES, TRACKS, levelPools, levelStars, nextInTrack, saveLevelResult, starsFor,
+  CAMPAIGN_WAVES, TRACKS, levelItems, levelPools, levelStars, nextInTrack, saveLevelResult, starsFor,
 } from './progress/campaign';
-import { recordEncounters, reviewWeight, statsOf, weakestItems } from './progress/stats';
+import { MASTERED_BOX, recordEncounter, reviewWeight, statsOf, weakestItems } from './progress/stats';
 import { WAVES_PER_GAME, loadSettings, saveSettings } from './settings';
+import { showIntro } from './ui/intro';
 import { showMenu, type MenuAction } from './ui/menu';
 import { showPause } from './ui/pause';
 import { showResults, type ResultsExtras } from './ui/results';
@@ -75,17 +76,38 @@ function gameContent(action: MenuAction): { pools: StudyItem[][]; totalWaves: nu
   }
 }
 
+/** Antes de un nivel con cosas nuevas, se presentan una por una. */
 function play(action: MenuAction) {
+  const fresh = action.kind === 'level' ? levelItems(action.level).filter((i) => !statsOf(i.id)) : [];
+  if (fresh.length === 0) {
+    startGame(action);
+    return;
+  }
+  unmount?.();
+  unmount = showIntro(overlay, action.kind === 'level' ? action.level.title : '', fresh, {
+    onStart: () => startGame(action),
+    onMenu: toMenu,
+  });
+}
+
+function startGame(action: MenuAction) {
   const s = settings;
   unmount?.();
   unmount = null;
   stopIdle();
+  // En la campaña y el repaso la ayuda se va retirando sola; en práctica libre, como se elija.
+  const auto = action.kind !== 'practice';
+  const newlyMastered = new Map<string, StudyItem>();
   applyVolumes(s.volumes);
   playMusic('batalla');
   const game = new Game(stage, background, {
     ...gameContent(action),
-    showHints: s.showHints,
-    showFurigana: s.showFurigana,
+    romajiHelp: auto ? 'auto' : s.romajiHelp,
+    furiganaHelp: auto ? 'auto' : s.furiganaHelp,
+    onEncounter: (encounter) => {
+      if (recordEncounter(encounter)) newlyMastered.set(encounter.item.id, encounter.item);
+      else if (statsOf(encounter.item.id)!.box < MASTERED_BOX) newlyMastered.delete(encounter.item.id);
+    },
     difficulty: s.difficulty,
     weightOf: s.smartReview ? reviewWeight : undefined,
     // Solo en desarrollo: ?oleada=N arranca en esa oleada para probar.
@@ -107,7 +129,7 @@ function play(action: MenuAction) {
     unmount?.();
     startIdle();
     playMusic('calma');
-    const extras: ResultsExtras = { newlyMastered: recordEncounters(result.encounters) };
+    const extras: ResultsExtras = { newlyMastered: [...newlyMastered.values()] };
     let onNext: (() => void) | undefined;
     if (action.kind === 'level') {
       const stars = starsFor(result);

@@ -1,7 +1,8 @@
 import { ALL_ITEMS, SECTIONS } from '../data';
 import type { ItemGroup, StudyItem } from '../data/types';
 import { resetCampaign } from '../progress/campaign';
-import { masteryOf, resetStats, statsOf, weakestItems, type MasteryLevel } from '../progress/stats';
+import { stageForBox, type HelpStage } from '../progress/help';
+import { boxOf, masteryOf, resetStats, statsOf, weakestItems, type MasteryLevel } from '../progress/stats';
 import { canonicalRomaji } from '../romaji/matcher';
 
 const LEVEL_NAMES: Record<MasteryLevel, string> = {
@@ -10,6 +11,17 @@ const LEVEL_NAMES: Record<MasteryLevel, string> = {
   learning: 'aprendiendo',
   mastered: 'dominado',
 };
+
+const HELP_NAMES: Partial<Record<HelpStage, string>> = {
+  full: 'con ayuda',
+  delayed: 'ayuda si dudás',
+  none: 'sin ayuda',
+};
+
+/** En qué etapa está la ayuda (romaji en kana, furigana en kanji) de un ítem; off si nunca apareció. */
+function helpStageOf(item: StudyItem): HelpStage {
+  return statsOf(item.id) ? stageForBox(boxOf(item.id)) : 'off';
+}
 
 function escapeAttr(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
@@ -22,6 +34,8 @@ function tooltip(item: StudyItem): string {
   const lines = [`${item.text} — ${reading}`];
   if (item.meaning) lines.push(item.meaning);
   const s = statsOf(item.id);
+  const help = HELP_NAMES[helpStageOf(item)];
+  if (help) lines.push(`Ayuda: ${help}`);
   lines.push(s
     ? `Visto ${s.seen} · bien ${s.clean} · con errores ${s.errors} · se escapó ${s.escaped}`
     : 'Todavía no apareció');
@@ -34,7 +48,7 @@ function tiles(group: ItemGroup): string {
       <div class="group-name">${group.name}</div>
       <div class="tiles">
         ${group.items.map((i) => `
-          <span class="tile m-${masteryOf(i.id)} ${i.kind === 'word' ? 'wide' : ''}" title="${tooltip(i)}">${i.text}</span>`).join('')}
+          <span class="tile m-${masteryOf(i.id)} h-${helpStageOf(i)} ${i.kind === 'word' ? 'wide' : ''}" title="${tooltip(i)}">${i.text}</span>`).join('')}
       </div>
     </div>`;
 }
@@ -51,11 +65,16 @@ export function progressTab(): string {
   const weak = weakestItems(ALL_ITEMS).length;
   return `
     <p class="tab-intro">Cada kana, palabra y kanji sube de nivel cuando lo escribís bien y baja cuando te equivocás
-      o se te escapa. Con el repaso activado, lo más débil aparece más seguido. Pasá el mouse por encima para ver detalles.</p>
+      o se te escapa. A medida que sube, la ayuda (romaji o furigana) se retira: primero aparece solo si dudás
+      y, cuando lo dominás, ya no aparece. Con el repaso activado, lo más débil aparece más seguido. Pasá el mouse por encima para ver detalles.</p>
     <div class="progress-head">
       <div class="legend">
         ${(Object.keys(LEVEL_NAMES) as MasteryLevel[]).map((m) => `
           <span class="legend-item"><span class="tile m-${m}"></span>${LEVEL_NAMES[m]} <b>${total[m]}</b></span>`).join('')}
+      </div>
+      <div class="legend">
+        ${(['full', 'delayed', 'none'] as const).map((h) => `
+          <span class="legend-item"><span class="tile m-unseen h-${h}"></span>${HELP_NAMES[h]}</span>`).join('')}
       </div>
       <button type="button" class="btn" id="review-btn" ${weak ? '' : 'disabled'}>
         Repasar lo más débil${weak ? ` (${weak})` : ''}

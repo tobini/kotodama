@@ -244,8 +244,6 @@ export interface EnemyDrawOptions {
   isCandidate: boolean;
   /** Hay otro yōkai fijado como objetivo: este se atenúa para que el objetivo resalte. */
   dimmed: boolean;
-  showHint: boolean;
-  showFurigana: boolean;
 }
 
 const GOLD = '#e8b33a';
@@ -328,11 +326,15 @@ function drawLabel(
   const lit = opts.isTarget || opts.isCandidate;
   const isKanji = e.item.script === 'kanji';
 
-  // Kana: cada unidad se pinta de rojo al completarla. Kanji: el texto queda fijo y
-  // la lectura (furigana) aparece arriba a medida que se escribe.
+  // Kana: cada unidad se pinta de rojo al completarla y, mientras se aprende, lleva su
+  // romaji abajo. Kanji: el texto queda fijo y la lectura (furigana) va arriba.
+  const romaji = isKanji ? [] : units.map((u, i) => (e.romajiVisible(i) ? u.options[0] : ''));
+  const romajiRow = !isKanji && (e.romajiReserved || romaji.some(Boolean));
+  ctx.font = `700 15px ${UI_FONT}`;
+  const romajiWidths = romaji.map((text) => (text ? ctx.measureText(text).width + 8 : 0));
   ctx.font = `600 38px ${KANA_FONT}`;
   const mainText = isKanji ? [e.item.text] : units.map((u) => u.kana);
-  const widths = mainText.map((text) => ctx.measureText(text).width);
+  const widths = mainText.map((text, i) => Math.max(ctx.measureText(text).width, romajiWidths[i] ?? 0));
   const textW = widths.reduce((a, b) => a + b, 0);
 
   ctx.font = `600 16px ${KANA_FONT}`;
@@ -341,8 +343,9 @@ function drawLabel(
 
   const padX = 14;
   const furiH = isKanji ? 20 : 0;
+  const romajiH = romajiRow ? 18 : 0;
   const w = Math.max(56, Math.max(textW, furiW) + padX * 2);
-  const h = 54 + furiH;
+  const h = 54 + furiH + romajiH;
   const x0 = x - w / 2;
   const y0 = y - r - 16 - h;
 
@@ -378,33 +381,47 @@ function drawLabel(
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
 
-  // En un kanji suelto hay varias lecturas válidas: no mostramos pistas hasta que se empieza a escribir.
-  const anyReading = e.item.kind === 'kanji' && !e.matcher.typed;
+  // En un kanji suelto hay varias lecturas válidas: si no hay ayuda, no damos pistas
+  // (ni la cantidad de kana) hasta que se empieza a escribir.
+  const showsReading = units.some((_, i) => e.furiganaVisible(i));
+  const anyReading = e.item.kind === 'kanji' && !e.matcher.typed && !showsReading;
   if (isKanji && !anyReading) {
     let fx = x - furiW / 2;
     const fy = y0 + 14;
     ctx.font = `600 16px ${KANA_FONT}`;
     units.forEach((u, i) => {
-      if (i < completedUnits) ctx.fillStyle = STAMP;
-      else ctx.fillStyle = opts.showFurigana ? '#7a7286' : FURIGANA_HIDDEN;
+      const shown = i < completedUnits || e.furiganaVisible(i);
+      ctx.fillStyle = i < completedUnits ? STAMP : shown ? '#7a7286' : FURIGANA_HIDDEN;
       // Sin furigana, lo que falta se muestra como puntitos para no revelar la lectura.
-      ctx.fillText(i < completedUnits || opts.showFurigana ? u.kana : '・'.repeat([...u.kana].length), fx, fy);
+      ctx.fillText(shown ? u.kana : '・'.repeat([...u.kana].length), fx, fy);
       fx += furiWidths[i];
     });
   }
 
   ctx.font = `600 38px ${KANA_FONT}`;
+  ctx.textAlign = 'center';
   let cx = x - textW / 2;
   mainText.forEach((text, i) => {
     const done = isKanji ? e.matcher.done : i < completedUnits;
     ctx.fillStyle = done ? STAMP : INK;
-    ctx.fillText(text, cx, y0 + furiH + 54 / 2 + 2);
+    ctx.fillText(text, cx + widths[i] / 2, y0 + furiH + 54 / 2 + 2);
     cx += widths[i];
   });
 
-  // Romaji escrito (y la pista, si está activada) debajo del yōkai
+  if (romajiRow) {
+    ctx.font = `700 15px ${UI_FONT}`;
+    cx = x - textW / 2;
+    romaji.forEach((text, i) => {
+      ctx.fillStyle = i < completedUnits ? 'rgba(194,59,46,0.55)' : '#5b5370';
+      if (text) ctx.fillText(text, cx + widths[i] / 2, y0 + furiH + 58);
+      cx += widths[i];
+    });
+  }
+  ctx.textAlign = 'left';
+
+  // Romaji escrito debajo del yōkai (con kanji, y la ayuda en romaji activada, también lo que falta).
   const typed = e.matcher.typed;
-  const hint = opts.showHint ? e.matcher.remainingHint() : '';
+  const hint = isKanji && e.romajiVisible(completedUnits) ? e.matcher.remainingHint() : '';
   if (typed || hint) {
     const size = lit ? 22 : 18;
     ctx.font = `700 ${size}px ${UI_FONT}`;

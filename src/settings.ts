@@ -1,4 +1,5 @@
 import type { Difficulty } from './game/game';
+import type { HelpMode } from './progress/help';
 
 export type GameMode = 'partida' | 'infinito';
 
@@ -16,8 +17,9 @@ export interface Settings {
   groups: string[];
   difficulty: Difficulty;
   mode: GameMode;
-  showHints: boolean;
-  showFurigana: boolean;
+  /** Ayuda en práctica libre (en la campaña siempre es automática). */
+  romajiHelp: HelpMode;
+  furiganaHelp: HelpMode;
   /** Lo que más se falla aparece más seguido. */
   smartReview: boolean;
   /** Última pestaña abierta del menú. */
@@ -34,8 +36,8 @@ const DEFAULTS: Settings = {
   groups: ['hiragana:a', 'hiragana:k', 'hiragana:s'],
   difficulty: 'normal',
   mode: 'partida',
-  showHints: true,
-  showFurigana: true,
+  romajiHelp: 'auto',
+  furiganaHelp: 'auto',
   smartReview: true,
   tab: 'campana',
   volumes: { music: 0.6, sfx: 0.8, voice: 0.9 },
@@ -45,8 +47,16 @@ export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
-      const saved = JSON.parse(raw);
-      return { ...DEFAULTS, ...saved, volumes: { ...DEFAULTS.volumes, ...saved.volumes } };
+      const { showHints, showFurigana, ...saved } = JSON.parse(raw);
+      // Antes la ayuda era sí/no: lo desactivado sigue desactivado, lo demás pasa a automático.
+      const old = (on: unknown): HelpMode => (on === false ? 'nunca' : 'auto');
+      return {
+        ...DEFAULTS,
+        romajiHelp: old(showHints),
+        furiganaHelp: old(showFurigana),
+        ...saved,
+        volumes: { ...DEFAULTS.volumes, ...saved.volumes },
+      };
     }
   } catch {
     // almacenamiento no disponible: usamos los valores por defecto

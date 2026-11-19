@@ -27,5 +27,13 @@ En desarrollo, `?oleada=N` en la URL arranca la partida en esa oleada (útil par
 - `src/data/`: contenido de estudio (`StudyItem`): kana, vocabulario en kana y kanji N5. Criterio: si una palabra lleva kanji que no son N5, se escribe en kana (como en el examen).
 - `src/audio/`: efectos, música generativa (escala miyako-bushi) y voz japonesa del navegador.
 - `src/game/`: loop del juego, enemigos, efectos y dibujo en canvas.
-- `src/progress/`: estadísticas por ítem (cajas tipo Leitner, en localStorage) y campaña. Para agregar niveles, sumarlos a `LEVELS` en `campaign.ts`.
-- `src/ui/`: menú (campaña, práctica libre, progreso), pausa y resultados (DOM).
+- `src/progress/`: estadísticas por ítem (cajas tipo Leitner, en localStorage), campaña y ayuda gradual (`help.ts`). Para agregar niveles, sumarlos a `LEVELS` en `campaign.ts`.
+- `src/ui/`: menú (campaña, práctica libre, progreso), presentación de lo nuevo, pausa y resultados (DOM).
+
+## Ayuda gradual
+
+El romaji (debajo de cada kana) y el furigana (sobre los kanji) dependen de la caja de cada ítem:
+cajas 0–1 se ven siempre, 2–3 aparecen si dudás 2 segundos o te equivocás, desde la 4 (dominado) no aparecen
+(al equivocarte se ve solo lo que toca escribir). Escribir algo con la ayuda a la vista lo sube como máximo
+a la caja 3: para dominarlo hay que escribirlo sin ayuda. Las palabras en kana también cuentan como práctica
+de cada kana que las forma.

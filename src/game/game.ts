@@ -2,6 +2,7 @@ import { playMusic, setMusicIntensity } from '../audio/music';
 import { sfx } from '../audio/sfx';
 import { speak } from '../audio/voice';
 import type { StudyItem } from '../data/types';
+import { kanaItemForUnit, type HelpMode } from '../progress/help';
 import type { Encounter } from '../progress/stats';
 import { canonicalRomaji } from '../romaji/matcher';
 import { Effects } from './effects';
@@ -26,15 +27,18 @@ export interface GameConfig {
    * grupos grandes (ej. combinados) no tapan a los chicos.
    */
   pools: StudyItem[][];
-  showHints: boolean;
-  /** Mostrar la lectura sobre los kanji antes de escribirla. */
-  showFurigana: boolean;
+  /** Romaji debajo de los kana. */
+  romajiHelp: HelpMode;
+  /** Lectura sobre los kanji antes de escribirla. */
+  furiganaHelp: HelpMode;
   difficulty: Difficulty;
   /** null = modo infinito. */
   totalWaves: number | null;
   onPauseChange?: (paused: boolean) => void;
   /** Peso de cada ítem al sortear (repaso inteligente). Sin esto, todos pesan igual. */
   weightOf?: (item: StudyItem) => number;
+  /** Cada vez que se termina (o se escapa) un ítem, para ir guardando el progreso. */
+  onEncounter?: (encounter: Encounter) => void;
   /** Oleada inicial (para probar; por defecto 1). */
   startWave?: number;
 }
@@ -217,8 +221,6 @@ export class Game {
       isTarget: false,
       isCandidate: false,
       dimmed: target !== null || candidates.length > 0,
-      showHint: this.config.showHints,
-      showFurigana: this.config.showFurigana,
     };
     for (const e of this.enemies) {
       if (e !== target && !candidates.includes(e)) drawEnemy(ctx, e, this.time, opts);
@@ -254,6 +256,10 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- oleadas
+
+  private get helpModes() {
+    return { romaji: this.config.romajiHelp, furigana: this.config.furiganaHelp };
+  }
 
   private get spawnInterval(): number {
     return Math.max(0.55, 2.1 - 0.13 * (this.wave - 1)) * this.diff.spawn;
@@ -326,7 +332,7 @@ export class Game {
     const layers = kind === 'oni' ? (this.wave >= 8 ? 3 : 2) : 1;
     // Al tengu, que es rápido, le tocan cosas cortas si hay.
     const prefer = kind === 'tengu' ? (i: StudyItem) => [...i.reading].length <= 3 : undefined;
-    const enemy = new Enemy(kind, this.pickItems(layers, prefer), W + 60, this.pickY(), 0);
+    const enemy = new Enemy(kind, this.pickItems(layers, prefer), W + 60, this.pickY(), 0, this.helpModes);
     // Las palabras largas avanzan más lento para que haya tiempo de escribirlas.
     const lengthFactor = 1 / (1 + 0.08 * (enemy.matcher.units.length - 1));
     enemy.speed = this.baseSpeed * enemy.spec.speed * lengthFactor * (0.85 + Math.random() * 0.3);
@@ -339,7 +345,7 @@ export class Game {
   private spawnBoss() {
     this.bossPending = false;
     const layers = Math.min(14, 5 + Math.floor(this.wave / 2));
-    const boss = new Enemy('boss', this.pickItems(layers), W + 100, (MIN_Y + MAX_Y) / 2 + 30, 0);
+    const boss = new Enemy('boss', this.pickItems(layers), W + 100, (MIN_Y + MAX_Y) / 2 + 30, 0, this.helpModes);
     boss.speed = this.baseSpeed * boss.spec.speed;
     this.enemies.push(boss);
     this.banner = { title: '¡Llega el Ōoni!', sub: '大鬼', time: BANNER_SECONDS, duration: BANNER_SECONDS };
@@ -531,8 +537,10 @@ export class Game {
     for (const t of targets) t.errorFlash = 0.35;
     // El error se anota al más cercano (el más urgente).
     if (targets.length) {
-      this.report(targets[0].item).errors++;
-      targets[0].layerErrors++;
+      const t = targets[0];
+      this.report(t.item).errors++;
+      t.layerErrors++;
+      t.unitErrors.add(t.matcher.completedUnits);
     }
   }
 
@@ -544,7 +552,8 @@ export class Game {
     const sub = item.script === 'kanji' ? `${matcher.reading} · ${item.meaning ?? ''}` : item.meaning ?? '';
     this.effects.float(e.x, e.y - e.spec.radius - 80, matcher.typed, sub);
     speak(item.spoken?.[matcher.pathIndex] ?? matcher.reading);
-    this.encounters.push({ item, outcome: e.layerErrors > 0 ? 'errors' : 'clean' });
+    this.encounter({ item, outcome: e.layerErrors > 0 ? 'errors' : 'clean', helped: e.helped });
+    if (item.kind === 'word' && item.script !== 'kanji') this.practiceKana(e);
     this.chargeKamikaze(KAMIKAZE_PER_ITEM);
 
     if (e.nextItem()) {
@@ -611,7 +620,7 @@ export class Game {
     this.combo = 0;
     this.shake = e.kind === 'boss' ? 24 : 14;
     this.report(e.item).escaped++;
-    this.encounters.push({ item: e.item, outcome: 'escaped' });
+    this.encounter({ item: e.item, outcome: 'escaped' });
     this.effects.burst(DEFENSE_X, e.y, '#c58bff', 30, 260);
     this.effects.float(DEFENSE_X + 80, e.y - 40, `${e.item.text} = ${canonicalRomaji(e.item.reading)}`, '', '#ff9d9d');
     if (this.lives <= 0) {
@@ -621,6 +630,28 @@ export class Game {
       sfx.gameOver();
     } else {
       sfx.breach();
+    }
+  }
+
+  private encounter(encounter: Encounter) {
+    this.encounters.push(encounter);
+    this.config.onEncounter?.(encounter);
+  }
+
+  /** Escribir una palabra en kana también cuenta como práctica de cada kana que la forma. */
+  private practiceKana(e: Enemy) {
+    const byItem = new Map<StudyItem, { errors: boolean; helped: boolean }>();
+    e.matcher.units.forEach((u, i) => {
+      const kana = kanaItemForUnit(u.kana);
+      if (!kana) return;
+      const prev = byItem.get(kana) ?? { errors: false, helped: false };
+      byItem.set(kana, {
+        errors: prev.errors || e.unitErrors.has(i),
+        helped: prev.helped || e.helpedUnits.has(i),
+      });
+    });
+    for (const [kana, { errors, helped }] of byItem) {
+      this.config.onEncounter?.({ item: kana, outcome: errors ? 'errors' : 'clean', helped });
     }
   }
 

@@ -744,3 +744,88 @@ kbd {
 .track.locked .track-jp {
   color: var(--muted);
 }
+
+/* Presentación de lo nuevo antes de un nivel */
+.intro-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.intro-card {
+  background: #fffaf0;
+  border: 1px solid var(--paper-dark);
+  border-radius: 8px;
+  padding: 10px 8px;
+  text-align: center;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.intro-card.wide {
+  grid-column: span 2;
+}
+
+.intro-card:hover,
+.intro-card:focus-visible {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(232, 179, 58, 0.35);
+  outline: none;
+}
+
+.intro-card .kana {
+  font-family: var(--kana);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.intro-card .reading {
+  font-family: var(--kana);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.intro-card .romaji {
+  font-weight: 700;
+  color: var(--vermilion);
+}
+
+.intro-card .meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Etapa de la ayuda: punto lleno = con ayuda, anillo = ayuda si dudás, nada = sin ayuda */
+.tile.h-full,
+.tile.h-delayed {
+  position: relative;
+}
+
+.tile.h-full::after,
+.tile.h-delayed::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.tile.h-full::after {
+  background: var(--vermilion);
+}
+
+.tile.h-delayed::after {
+  border: 1.5px solid var(--vermilion);
+}
+
+.legend .tile.h-full::after,
+.legend .tile.h-delayed::after {
+  top: 4px;
+  right: 4px;
+}

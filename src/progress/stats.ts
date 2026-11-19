@@ -7,12 +7,16 @@ export const MAX_BOX = 5;
 export const MASTERED_BOX = 4;
 /** Caja en la que entra un ítem la primera vez que aparece. */
 const START_BOX = 1;
+/** Con la ayuda a la vista se puede subir hasta acá: para dominarlo hay que escribirlo sin ayuda. */
+export const HELPED_MAX_BOX = 3;
 
 export type Outcome = 'clean' | 'errors' | 'escaped';
 
 export interface Encounter {
   item: StudyItem;
   outcome: Outcome;
+  /** Si se vio el romaji o el furigana mientras se escribía. */
+  helped?: boolean;
 }
 
 export interface ItemStats {
@@ -49,9 +53,9 @@ function save() {
   }
 }
 
-export function nextBox(box: number | undefined, outcome: Outcome): number {
+export function nextBox(box: number | undefined, outcome: Outcome, helped = false): number {
   const current = box ?? START_BOX;
-  if (outcome === 'clean') return Math.min(MAX_BOX, current + 1);
+  if (outcome === 'clean') return Math.max(current, Math.min(helped ? HELPED_MAX_BOX : MAX_BOX, current + 1));
   if (outcome === 'errors') return Math.max(0, current - 1);
   return 0;
 }
@@ -60,25 +64,24 @@ export function statsOf(id: string): ItemStats | undefined {
   return all()[id];
 }
 
-/** Guarda lo que pasó en una partida. Devuelve los ítems que pasaron a estar dominados. */
-export function recordEncounters(encounters: Encounter[]): StudyItem[] {
+/** Guarda un encuentro con un ítem. Devuelve true si con esto pasó a estar dominado. */
+export function recordEncounter({ item, outcome, helped }: Encounter): boolean {
   const stats = all();
-  const now = Date.now();
-  const newlyMastered = new Map<string, StudyItem>();
-  for (const { item, outcome } of encounters) {
-    const prev = stats[item.id];
-    const wasMastered = (prev?.box ?? 0) >= MASTERED_BOX;
-    const s: ItemStats = prev ?? { box: START_BOX, seen: 0, clean: 0, errors: 0, escaped: 0, last: 0 };
-    s.box = nextBox(prev?.box, outcome);
-    s.seen++;
-    s[outcome === 'clean' ? 'clean' : outcome === 'errors' ? 'errors' : 'escaped']++;
-    s.last = now;
-    stats[item.id] = s;
-    if (!wasMastered && s.box >= MASTERED_BOX) newlyMastered.set(item.id, item);
-    else if (s.box < MASTERED_BOX) newlyMastered.delete(item.id);
-  }
+  const prev = stats[item.id];
+  const wasMastered = (prev?.box ?? 0) >= MASTERED_BOX;
+  const s: ItemStats = prev ?? { box: START_BOX, seen: 0, clean: 0, errors: 0, escaped: 0, last: 0 };
+  s.box = nextBox(prev?.box, outcome, helped);
+  s.seen++;
+  s[outcome === 'clean' ? 'clean' : outcome === 'errors' ? 'errors' : 'escaped']++;
+  s.last = Date.now();
+  stats[item.id] = s;
   save();
-  return [...newlyMastered.values()];
+  return !wasMastered && s.box >= MASTERED_BOX;
+}
+
+/** Caja actual de un ítem (los que nunca aparecieron cuentan como recién llegados). */
+export function boxOf(id: string): number {
+  return statsOf(id)?.box ?? START_BOX;
 }
 
 export function masteryOf(id: string): MasteryLevel {
