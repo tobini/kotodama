@@ -33,7 +33,7 @@ En desarrollo, `?oleada=N` en la URL arranca la partida en esa oleada (útil par
 ## Ayuda gradual
 
 El romaji (debajo de cada kana) y el furigana (sobre los kanji) dependen de la caja de cada ítem:
-cajas 0–1 se ven siempre, 2–3 aparecen si dudás 2 segundos o te equivocás, desde la 4 (dominado) no aparecen
+cajas 0–1 se ven siempre, 2–3 aparecen cuando el yōkai pasa la mitad de la pantalla o te equivocás, desde la 4 (dominado) no aparecen
 (al equivocarte se ve solo lo que toca escribir). Escribir algo con la ayuda a la vista lo sube como máximo
 a la caja 3: para dominarlo hay que escribirlo sin ayuda. Las palabras en kana también cuentan como práctica
 de cada kana que las forma.

@@ -1,6 +1,7 @@
 import type { StudyItem } from '../data/types';
 import { furiganaStage, romajiStages, type HelpMode, type HelpStage } from '../progress/help';
 import { RomajiMatcher } from '../romaji/matcher';
+import { W } from './stage';
 
 export type EnemyState = 'alive' | 'banished' | 'dead';
 
@@ -34,8 +35,8 @@ export const KINDS: Record<EnemyKind, KindSpec> = {
 };
 
 const BANISH_SECONDS = 0.35;
-/** Segundos que se espera antes de mostrar la ayuda de lo que se está aprendiendo. */
-export const HINT_DELAY = 2;
+/** Lo que se está aprendiendo muestra su ayuda al pasar este punto (la mitad de la pantalla). */
+const HINT_X = W / 2;
 
 export interface HelpModes {
   romaji: HelpMode;
@@ -76,7 +77,6 @@ export class Enemy {
   helpedUnits = new Set<number>();
   private romajiStage: HelpStage[] = [];
   private furiganaStage: HelpStage = 'off';
-  private layerAge = 0;
   readonly phase = Math.random() * Math.PI * 2;
   private age = 0;
   private index = 0;
@@ -101,14 +101,13 @@ export class Enemy {
     const romaji = isKanji && this.help.romaji === 'auto' ? 'nunca' : this.help.romaji;
     this.romajiStage = romajiStages(this.matcher.units.map((u) => u.kana), romaji);
     this.furiganaStage = isKanji ? furiganaStage(this.item, this.help.furigana) : 'off';
-    this.layerAge = 0;
     this.unitErrors.clear();
     this.helpedUnits.clear();
   }
 
   private visible(stage: HelpStage | undefined, unit: number): boolean {
     if (stage === 'full') return true;
-    if (stage === 'delayed' && (this.layerAge >= HINT_DELAY || this.layerErrors > 0)) return true;
+    if (stage === 'delayed' && (this.x <= HINT_X || this.layerErrors > 0)) return true;
     // Ya aprendido: al equivocarse se ve solo lo que toca escribir ahora.
     return stage === 'none' && this.layerErrors > 0 && unit === this.matcher.completedUnits;
   }
@@ -176,7 +175,6 @@ export class Enemy {
 
   update(dt: number) {
     this.age += dt;
-    this.layerAge += dt;
     if (this.state === 'alive') this.trackHelp();
     this.errorFlash = Math.max(0, this.errorFlash - dt);
     this.hitFlash = Math.max(0, this.hitFlash - dt);

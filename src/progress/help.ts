@@ -6,7 +6,7 @@ import { boxOf, MASTERED_BOX } from './stats';
 
 /**
  * - full: la ayuda se ve desde que aparece.
- * - delayed: aparece si se duda un rato o al equivocarse.
+ * - delayed: aparece cuando el yōkai pasa la mitad de la pantalla o al equivocarse.
  * - none: no aparece (al equivocarse se muestra solo lo que sigue).
  * - off: no aparece nunca (ayuda desactivada).
  */
